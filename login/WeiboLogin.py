@@ -1,11 +1,9 @@
 #coding=utf-8
 import cookielib
-import string
+import re
 import urllib2
-
 import LoginEncode
 import LoginMatch
-
 
 class WeiboLogin:
 
@@ -21,27 +19,34 @@ class WeiboLogin:
 
     def Login(self):
         print "logining..."
-        self.EnableCookie()
+
+        cookie_support = urllib2.HTTPCookieProcessor(self.cookiejar)
+        opener = urllib2.build_opener(cookie_support, urllib2.HTTPHandler)
+        urllib2.install_opener(opener)  # 构建cookie对应的opener
+
         serverTime,nonce,pubkey,rsakv = self.GetServerTime()
         postData = LoginEncode.PostEncode(self.username, self.password, serverTime, nonce, pubkey, rsakv)  # 加密用户和密码
-        print "Post data length:\n", len(postData)
+        print "Post data length:", len(postData)
+
         req = urllib2.Request(self.loginUrl, postData, self.postHeader)  # 构造网络请求
         print "Posting request..."
         result = urllib2.urlopen(req)  # 发出网络请求
         self.cookiejar.save()
+
         text = result.read()
         # print unicode(text,'gbk')
-        if(string.find(text,'正在登录')):
-            print 'login sucess'
-            return True
-        else:
-            print 'login fail'
-            return False
 
-    def EnableCookie(self):
-        cookie_support = urllib2.HTTPCookieProcessor(self.cookiejar)
-        opener = urllib2.build_opener(cookie_support, urllib2.HTTPHandler)
-        urllib2.install_opener(opener)  # 构建cookie对应的opener
+        p = re.compile('location\.replace\([\'"](.*?)[\'"]')
+        try:
+            login_url = p.search(text).group(1)
+            # 由于之前的绑定，cookies信息会直接写入
+            urllib2.urlopen(login_url)
+            self.cookiejar.save()
+            print "Login success!"
+            return True
+        except:
+            print 'Login error!'
+            return False
 
     def GetServerTime(self):
         print "Getting server time and nonce..."
@@ -55,9 +60,9 @@ class WeiboLogin:
             return None
 
 if __name__ == '__main__':
-    weiboLogin = WeiboLogin('469464794@qq.com', 'XXXX')  # 邮箱（账号）、密码
-    if weiboLogin.Login() == True:
-        print "登陆成功！"
-    # myurl = "http://weibo.com/u/2806854355/home?wvr=5"
-    # htmlContent = urllib2.urlopen(myurl).read()
-    # print unicode(htmlContent,'gbk')
+    weiboLogin = WeiboLogin('469464794@qq.com', '*****')  # 邮箱（账号）、密码
+    if(weiboLogin.Login()):
+        print '登录成功'
+    myurl = "http://weibo.com/u/2806854355/home"
+    htmlContent = urllib2.urlopen(myurl).read()
+    print htmlContent.find('判断首页是否有我的昵称')#
