@@ -21,12 +21,13 @@ db.commit()
 loop = True
 while loop:
     import url.URLOperation
-    result = url.URLOperation.SelectURL(0)
+    result = url.URLOperation.SelectURL(2)
     if not result:
         loop = False
         break
     URLId = result[0]
     url = result[1]
+    userId = re.search('weibo.cn(.*)\/(.*)', url).group(2)
     print url
     cookie = {
         'M_WEIBOCN_PARAMS':'uicode%3D20000174',
@@ -41,6 +42,54 @@ while loop:
     html = requests.get(url, cookies=cookie).content
     soup = bs4.BeautifulSoup(html)
 
+    try:
+        fanNum = ''
+        userId = ''
+        userName = ''
+        userRecog = ''
+        userLocation = ''
+        userGender = ''
+        userSummary = ''
+
+        # 保存用户信息
+        tips = str(soup.find('div','tip2'))
+        fanNum = re.search('粉丝\[(\d+)\]'.encode('utf8'),tips.encode('utf8')).group(1)
+        userInfo = str(soup.find('div', 'ut'))
+        userUrl = 'http://weibo.cn' + re.search('<a\shref="(\/\d+\/info)">资料'.encode('utf8'),userInfo.encode('utf8')).group(1)
+        userHtml = requests.get(userUrl, cookies=cookie).content
+        userId = re.search('\/(\d+)\/',userUrl).group(1)
+        if re.search('>昵称:(.*?)<'.encode('utf8'),userHtml.encode('utf8')):
+            userName = re.search('>昵称:(.*?)<'.encode('utf8'),userHtml.encode('utf8')).group(1)
+        if re.search('>认证:(.*?)<'.encode('utf8'), userHtml.encode('utf8')):
+            userRecog = re.search('>认证:(.*?)<'.encode('utf8'), userHtml.encode('utf8')).group(1)
+        if re.search('>地区:(.*?)<'.encode('utf8'), userHtml.encode('utf8')):
+            userLocation = re.search('>地区:(.*?)<'.encode('utf8'), userHtml.encode('utf8')).group(1)
+        if re.search('>性别:(.*?)<'.encode('utf8'), userHtml.encode('utf8')):
+            userGender = re.search('>性别:(.*?)<'.encode('utf8'), userHtml.encode('utf8')).group(1)
+        if re.search('>简介:(.*?)<'.encode('utf8'), userHtml.encode('utf8')):
+            userSummary = re.search('>简介:(.*?)<'.encode('utf8'), userHtml.encode('utf8')).group(1)
+        if userGender == '女':
+            userGender = 1
+        else:
+            userGender = 0
+        print fanNum
+        print userId
+        print userName
+        print userRecog
+        print userLocation
+        print userGender
+        print userSummary
+
+        sql = "INSERT INTO userInfo (userId,userName,fanNum,userRecog,location,gender,summary) " \
+              "VALUES ('%s','%s','%s','%s','%s','%s','%s')" % (userId, userName, fanNum, userRecog, userLocation, userGender,userSummary)
+        print sql
+        cursor.execute(sql)
+        db.commit()
+        print 'insert userInfo success'
+    except:
+        userInfo = str(soup.find('div','ut'))
+        userName = re.search('class="ut">(.*?)的微博'.encode('utf8'),userInfo.encode('utf8')).group(1)
+
     contentList = soup.select('div.c')
     if not contentList:
         loop =False
@@ -51,8 +100,6 @@ while loop:
             divs['id']
         except:
             continue
-        userId = 0
-        userName = ''
         weiboContent = ''
         extraInfo = ''
         posts = 0
@@ -61,23 +108,13 @@ while loop:
         loopTime = 1
         for div in divs.find_all('div'):
             if(loopTime == 1):
-                try:
-                    userName = div.find('a', 'nk').string #用户名
-                    userUrl = div.find('a','nk')['href']#用户主页URL
-                    import url.URLOperation
-                    url.URLOperation.StoreURL(userUrl,2)
-                    print userUrl
-                    userId =  re.search('weibo.cn(.*)\/(.*)',userUrl).group(2)
-                except:
-                    continue
-
                 if div.find('span','ctt'):
                     weiboContent = str(div.find('span', 'ctt'))#微博正文
                     weiboContent = re.sub(r'</?\w+[^>]*>', '', weiboContent)
                 if div.find('span', 'ct'):
                     extraInfo = div.find('span', 'ct').string#发布时间以及来源
                 otherInfo = re.findall('\[(\d+)\]', str(div))
-                if otherInfo:
+                if len(otherInfo)>3:
                     posts = otherInfo[2]#微博评论数
                     repeats = otherInfo[1]#微博转发数
                     agrees = otherInfo[0]#微博点赞数
@@ -85,7 +122,7 @@ while loop:
                 if div.find('span', 'ct'):
                     extraInfo = div.find('span','ct').string
                 otherInfo = re.findall('\[(\d+)\]', str(div))
-                if otherInfo:
+                if len(otherInfo)>3:
                     posts = otherInfo[2]
                     repeats = otherInfo[1]
                     agrees = otherInfo[0]
@@ -127,10 +164,14 @@ while loop:
             print "insert weiboInfo fail"
 
     import url.URLOperation
-    if soup.find('div','pa').form.div.a.string == '下页':
-        nextPage = "http://weibo.cn" + soup.find('div', 'pa').form.div.a['href']
-        url.URLOperation.StoreURL(nextPage,0)
+    try:
+        if soup.find('div','pa').form.div.a.string == '下页':
+            nextPage = "http://weibo.cn" + soup.find('div', 'pa').form.div.a['href']
+            url.URLOperation.StoreURL(nextPage,2)
+            print nextPage
+    except:
+        print "No next page"
     url.URLOperation.UpdateURL(URLId)
 
-    randomTime = random.uniform(1,5)
+    randomTime = random.uniform(1,3)
     time.sleep(randomTime)
